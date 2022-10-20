@@ -66,9 +66,8 @@ int main(int argc, char *argv[])
                 // tokenize and put in array
                 for (int j = 0;; token = NULL, j++)
                 {
-                    arguTok = __strtok_r(token, arguDelim, &arguSavePtr); //__strtok_r(token, arguDelim, &arguSavePtr);
+                    arguTok = __strtok_r(token, arguDelim, &arguSavePtr);
                     argu[j] = arguTok;
-                    // printf("%s", arguTok);
                     if (arguTok == NULL)
                     {
                         break;
@@ -146,7 +145,6 @@ int main(int argc, char *argv[])
                         close(pipes[i * 2 + 1]);
                     }
                     // execvp
-                    // printf("%s \n", argu[1]);
                     if (execvp(argu[0], argu) == -1)
                     {
                         perror("execvp failed");
@@ -171,12 +169,9 @@ int main(int argc, char *argv[])
                 // maybe we should wait for the child at this point
                 waitpid(cpid, NULL, 0);
             }
-            // printf("%s \n", token);
-            // printf("we have %d args in first pipe \n", noArgs);
         }
 
-        // printf("%s", buffer);
-        // printf("we have %d pipes \n", noOfPipes);
+
     }
 }
 
