@@ -6,9 +6,14 @@
 #include <sys/wait.h>
 
 int getNoArgs(char *);
+void addToHistory(char *history[], int *historyIndex, char *args[]);
+void printHistory(char *history[], int historyIndex);
+void clearHistory(char *history[]);
+
 int main(int argc, char *argv[])
 {
-
+    char *history[100];
+    int historyIdx = 0;
     while (1)
     {
         size_t bufferSize;
@@ -61,13 +66,47 @@ int main(int argc, char *argv[])
                 // tokenize and put in array
                 for (int j = 0;; token = NULL, j++)
                 {
-                    arguTok = strtok_r(token, arguDelim, &arguSavePtr); //__strtok_r(token, arguDelim, &arguSavePtr);
+                    arguTok = __strtok_r(token, arguDelim, &arguSavePtr); //__strtok_r(token, arguDelim, &arguSavePtr);
                     argu[j] = arguTok;
                     // printf("%s", arguTok);
                     if (arguTok == NULL)
                     {
                         break;
                     }
+                }
+
+                if (strcmp(argu[0], "exit") == 0)
+                {
+
+                    exit(0);
+                }
+                else if (strcmp(argu[0], "cd") == 0)
+                {
+                    if (argu[1] == NULL)
+                    {
+                        printf("cd usage: cd <directory>");
+                    }
+                    else
+                    {
+                        chdir(argu[1]);
+                    }
+                    addToHistory(history, &historyIdx, argu);
+                    continue;
+                }
+                else if (strcmp(argu[0], "history") == 0)
+                {
+
+                    if (noArgs > 1 && strcmp(argu[1], "-c") == 0)
+                    {
+                        clearHistory(history);
+                        historyIdx = 0;
+                    }
+                    else
+                    {
+                        printHistory(history, historyIdx);
+                    }
+                    addToHistory(history, &historyIdx, argu);
+                    continue;
                 }
 
                 // fork and use the right pipe
@@ -108,12 +147,16 @@ int main(int argc, char *argv[])
                     }
                     // execvp
                     // printf("%s \n", argu[1]);
-                    execvp(argu[0], argu);
+                    if (execvp(argu[0], argu) == -1)
+                    {
+                        perror("execvp failed");
+                    }
                 }
 
                 // parent
                 // here we want to close the pipes we duped in child 2 ONLY
 
+                addToHistory(history, &historyIdx, argu);
                 if (i * 2 - 2 >= 0)
                 {
                     // read pipe
@@ -170,4 +213,47 @@ int getNoArgs(char *cmd)
         }
     }
     return noOfArgs;
+}
+
+void addToHistory(char *history[], int *historyIndex, char *args[])
+{
+    // note, history is an array who's pointer starts at the end of the arr and moves backwards
+    int count = 0;
+    for (int i = 0; args[i] != NULL; i++)
+    {
+        count += strlen(args[i]) + 1;
+    }
+
+    char *str = (char *)malloc(sizeof(char) * (count));
+    history[*historyIndex] = str;
+
+    for (int i = 0; args[i] != NULL; i++)
+    {
+        strcat(str, args[i]);
+        strcat(str, " ");
+    }
+
+    *historyIndex = (*historyIndex + 1) % 100;
+}
+void printHistory(char *history[], int historyIndex)
+{
+    int count = 0;
+    historyIndex = (historyIndex - 1) % 100;
+    if (history[historyIndex] == NULL)
+    {
+        return;
+    }
+    while (history[historyIndex] != NULL && count < 100)
+    {
+        printf("%d %s\n", count, history[historyIndex]);
+        count++;
+        historyIndex = (historyIndex + 99) % 100;
+    }
+}
+void clearHistory(char *history[])
+{
+    for (int i = 0; i < 100; i++)
+    {
+        history[i] = NULL;
+    }
 }
