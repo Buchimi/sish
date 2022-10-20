@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <error.h>
@@ -15,7 +16,6 @@ int main(int argc, char *argv[])
 
     char *history[100];
     int historyIdx = 0;
-    int firstRound = 1;
     while (1)
     {
         size_t bufferSize;
