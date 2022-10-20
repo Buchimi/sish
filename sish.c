@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 
 int getNoArgs(char *);
+void newAddToHistory(char *history[], int *historyIndex, char *buffer);
 void addToHistory(char *history[], int *historyIndex, char *args[]);
 void printHistory(char *history[], int historyIndex);
 void clearHistory(char *history[]);
@@ -15,17 +16,33 @@ int main(int argc, char *argv[])
 {
 
     char *history[100];
+    for (int i = 0; i < 100; i++)
+    {
+        history[i] = NULL;
+    }
     int historyIdx = 0;
+    int fromHist = 0;
+    char *cmdFromHistory;
     while (1)
     {
         size_t bufferSize;
         char *buffer;
+        size_t characters;
         // get the string
-        printf("sish> ");
-        size_t characters = getline(&buffer, &bufferSize, stdin);
+        if (fromHist)
+        {
+            fromHist = 0;
+            buffer = cmdFromHistory;
+        }
+        else
+        {
+            printf("sish> ");
+            characters = getline(&buffer, &bufferSize, stdin);
+            buffer[characters - 1] = '\0';
+            newAddToHistory(history, &historyIdx, buffer);
+        }
         //
         // tokenize the string
-        buffer[characters - 1] = '\0';
 
         int noOfPipes = 0;
         for (int i = 0; buffer[i] != '\0'; i++)
@@ -79,7 +96,14 @@ int main(int argc, char *argv[])
 
                 if (strcmp(argu[0], "exit") == 0)
                 {
-
+                    free(pipes);
+                    for (int i = 0; i < 100; i++)
+                    {
+                        if (history[i] != NULL)
+                        {
+                            free(history[i]);
+                        }
+                    }
                     exit(0);
                 }
                 else if (strcmp(argu[0], "cd") == 0)
@@ -92,7 +116,7 @@ int main(int argc, char *argv[])
                     {
                         chdir(argu[1]);
                     }
-                    addToHistory(history, &historyIdx, argu);
+                    // addToHistory(history, &historyIdx, argu);
                     continue;
                 }
                 else if (strcmp(argu[0], "history") == 0)
@@ -103,11 +127,29 @@ int main(int argc, char *argv[])
                         clearHistory(history);
                         historyIdx = 0;
                     }
+                    else if (noArgs > 1)
+                    {
+                        int translatedPtr = historyIdx - atoi(argu[1]) - 1;
+                        if (translatedPtr < 0)
+                        {
+                            translatedPtr += 100;
+                        }
+                        if (translatedPtr < 0 || translatedPtr > 99 || history[translatedPtr] == NULL)
+                        {
+                            printf("Invalid history index");
+                        }
+                        else if (history[translatedPtr] != NULL)
+                        {
+                            cmdFromHistory = history[translatedPtr];
+                            fromHist = 1;
+                            /* code */
+                        }
+                    }
                     else
                     {
                         printHistory(history, historyIdx);
                     }
-                    addToHistory(history, &historyIdx, argu);
+                    // addToHistory(history, &historyIdx, argu);
                     continue;
                 }
 
@@ -156,7 +198,7 @@ int main(int argc, char *argv[])
                 // parent
                 // here we want to close the pipes we duped in child 2 ONLY
 
-                addToHistory(history, &historyIdx, argu);
+                // addToHistory(history, &historyIdx, argu);
                 if (i * 2 - 2 >= 0)
                 {
                     // read pipe
@@ -208,6 +250,14 @@ int getNoArgs(char *cmd)
         }
     }
     return noOfArgs;
+}
+
+void newAddToHistory(char *history[], int *historyIndex, char *str)
+{
+    char *ptr = (char *)malloc(sizeof(char) * strlen(str));
+    strcpy(ptr, str);
+    history[*historyIndex] = ptr;
+    *historyIndex = (*historyIndex + 1) % 100;
 }
 
 void addToHistory(char *history[], int *historyIndex, char *args[])
