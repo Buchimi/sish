@@ -12,8 +12,10 @@ void clearHistory(char *history[]);
 
 int main(int argc, char *argv[])
 {
+
     char *history[100];
     int historyIdx = 0;
+    int firstRound = 1;
     while (1)
     {
         size_t bufferSize;
@@ -33,7 +35,8 @@ int main(int argc, char *argv[])
                 noOfPipes++;
             }
         }
-        int pipes[noOfPipes * 2];
+
+        int *pipes = (int *)(malloc(sizeof(int) * noOfPipes * 2));
 
         for (int i = 0; i < noOfPipes; i++)
         {
@@ -123,7 +126,6 @@ int main(int argc, char *argv[])
                             // i * 2 - 2 is the read pipe, i * 2 + 1 is the write pipe
                             //  close the pipes we don't use
                             close(pipes[j]);
-                            printf("We closed pipe %d in cmd %s", j, argu[0]);
                         }
                     }
 
@@ -170,8 +172,6 @@ int main(int argc, char *argv[])
                 waitpid(cpid, NULL, 0);
             }
         }
-
-
     }
 }
 
