@@ -6,44 +6,46 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-int getNoArgs(char *);
-void newAddToHistory(char *history[], int *historyIndex, char *buffer);
-void addToHistory(char *history[], int *historyIndex, char *args[]);
-void printHistory(char *history[], int historyIndex);
+int getNoArgs(char *);                                                                  // this function returns the number of "args" or number commands seperatted by a space
+void addToHistory(char *history[], int *historyIndex, char *buffer, int *historyStart); // add's command to the history
+void printHistory(char *history[], int historyStart);
 void clearHistory(char *history[]);
 
 int main(int argc, char *argv[])
 {
 
-    char *history[100];
+    char *history[100]; // initializes the history to have a max of 100
     for (int i = 0; i < 100; i++)
     {
-        history[i] = NULL;
+        history[i] = NULL; // set's every element to null
     }
-    int historyIdx = 0;
-    int fromHist = 0;
-    char *cmdFromHistory;
+    int historyStart = 0; // the pointer to the start of the history
+    int historyIdx = 0;   // pointer to the next empty slot in the history
+    int fromHist = 0;     // boolean for if this command is called from the history
+    char *cmdFromHistory; // copy of the command from history
     while (1)
     {
+        // prereqs for getline
         size_t bufferSize;
         char *buffer;
         size_t characters;
-        // get the string
+
         if (fromHist)
         {
+            // if this command is from history, we don't want to print nor get the line
             fromHist = 0;
             buffer = cmdFromHistory;
         }
         else
         {
+            // get the string
             printf("sish> ");
             characters = getline(&buffer, &bufferSize, stdin);
             buffer[characters - 1] = '\0';
-            newAddToHistory(history, &historyIdx, buffer);
+            addToHistory(history, &historyIdx, buffer, &historyStart);
         }
-        //
-        // tokenize the string
 
+        // find the number of pipes. This is important for figuring out the amount of pipes
         int noOfPipes = 0;
         for (int i = 0; buffer[i] != '\0'; i++)
         {
@@ -53,8 +55,11 @@ int main(int argc, char *argv[])
             }
         }
 
+        // initialize a dynamic pipe array
         int *pipes = (int *)(malloc(sizeof(int) * noOfPipes * 2));
 
+        // create as many pipes we need in the array.
+        // odd indexes are read file descriptors, even ones are write file descriptors
         for (int i = 0; i < noOfPipes; i++)
         {
             if (pipe(pipes + (2 * i)) == -1)
@@ -63,18 +68,22 @@ int main(int argc, char *argv[])
             }
         }
 
+        // here we tokenize the string by separating each command separated by pipes
         char *token = NULL;
         char *saveptr = NULL;
         char *delim = "|";
 
+        // we break the loop if the token equals NULL
         for (int i = 0;; buffer = NULL, i++)
         {
 
             token = __strtok_r(buffer, delim, &saveptr);
             if (token == NULL)
             {
+
                 break;
             }
+            // get the number of args. This is important if
             int noArgs = getNoArgs(token);
             if (noArgs > 0)
             {
@@ -83,7 +92,7 @@ int main(int argc, char *argv[])
                 char *arguDelim = " ";
                 char *arguSavePtr = NULL;
 
-                // tokenize and put in array
+                // tokenize and put the commands in an array
                 for (int j = 0;; token = NULL, j++)
                 {
                     arguTok = __strtok_r(token, arguDelim, &arguSavePtr);
@@ -94,73 +103,79 @@ int main(int argc, char *argv[])
                     }
                 }
 
+                // if we found an exit command
                 if (strcmp(argu[0], "exit") == 0)
                 {
+                    // clean up the pipes
                     free(pipes);
                     for (int i = 0; i < 100; i++)
                     {
                         if (history[i] != NULL)
                         {
+                            // since every entry is manually allocated, free everything
                             free(history[i]);
                         }
                     }
                     exit(0);
                 }
+                // if we find a cd command
                 else if (strcmp(argu[0], "cd") == 0)
                 {
                     if (argu[1] == NULL)
                     {
-                        printf("cd usage: cd <directory>");
+                        // incase there is no dir provided
+                        printf("cd usage: cd <directory> \n");
                     }
                     else
                     {
+                        // change dir
                         chdir(argu[1]);
                     }
-                    // addToHistory(history, &historyIdx, argu);
                     continue;
                 }
+                // if we have a history command
                 else if (strcmp(argu[0], "history") == 0)
                 {
 
+                    // if we have more than one arrgument and the second one is '-c'
                     if (noArgs > 1 && strcmp(argu[1], "-c") == 0)
                     {
                         clearHistory(history);
                         historyIdx = 0;
                     }
+                    // if we just have more than one arg, it's a number arg
                     else if (noArgs > 1)
                     {
-                        int translatedPtr = historyIdx - atoi(argu[1]) - 1;
-                        if (translatedPtr < 0)
+                        int translatedPtr = atoi(argu[1]) + historyStart;
+
+                        if (translatedPtr > 99 || history[translatedPtr] == NULL)
                         {
-                            translatedPtr += 100;
-                        }
-                        if (translatedPtr < 0 || translatedPtr > 99 || history[translatedPtr] == NULL)
-                        {
+                            // this is beyond our history array
                             printf("Invalid history index");
                         }
+                        // if we do have this command
                         else if (history[translatedPtr] != NULL)
                         {
-                            cmdFromHistory = history[translatedPtr];
-                            fromHist = 1;
-                            /* code */
+                            cmdFromHistory = history[translatedPtr]; // get the history command
+                            fromHist = 1;                            // let sish know this command is from the history
                         }
                     }
+                    // only one arg, so it's a lone history command
                     else
                     {
-                        printHistory(history, historyIdx);
+                        printHistory(history, historyStart);
                     }
-                    // addToHistory(history, &historyIdx, argu);
                     continue;
                 }
 
-                // fork and use the right pipe
                 int cpid = fork();
                 if (cpid == -1)
                 {
                     perror("Fork failed");
                 }
-                else if (cpid == 0)
+                else if (cpid == 0) // child process
                 {
+                    // assign pipes
                     for (int j = 0; j < (noOfPipes * 2); j++)
                     {
                         if (!(j == (i * 2 - 2) || j == (i * 2 + 1)))
@@ -171,8 +186,7 @@ int main(int argc, char *argv[])
                         }
                     }
 
-                    // child process
-                    //  pipe
+                    // redirect and close read pipe based on the rule
                     if (i * 2 - 2 >= 0)
                     {
                         // read pipe
@@ -181,10 +195,12 @@ int main(int argc, char *argv[])
                         dup2(pipes[i * 2 - 2], STDIN_FILENO);
                         close(pipes[i * 2 - 2]);
                     }
+                    // redirect and close write pipes based on the rule
                     if (i * 2 + 1 < noOfPipes * 2)
                     {
-                        // say we have two pipes, i at the last pipe == 2.
-                        // thus this won't run for the very last cmd since it'll attempt to write beyond the array
+                        // write pipe
+                        //  say we have two pipes, i at the last pipe == 2.
+                        //  thus this won't run for the very last cmd since it'll attempt to write beyond the array
                         dup2(pipes[i * 2 + 1], STDOUT_FILENO);
                         close(pipes[i * 2 + 1]);
                     }
@@ -196,9 +212,8 @@ int main(int argc, char *argv[])
                 }
 
                 // parent
-                // here we want to close the pipes we duped in child 2 ONLY
-
-                // addToHistory(history, &historyIdx, argu);
+                // here we want to close the pipes we redirected in child ONLY
+                // this is so that the parent doesn't interfere with inter process communications
                 if (i * 2 - 2 >= 0)
                 {
                     // read pipe
@@ -210,8 +225,13 @@ int main(int argc, char *argv[])
                     close(pipes[i * 2 + 1]);
                 }
 
-                // maybe we should wait for the child at this point
+                // wait for child to finish executing
                 waitpid(cpid, NULL, 0);
+            }
+            else
+            {
+                // this execs if commands end with an empty pipe
+                printf("Illegal pipe '|' usage");
             }
         }
     }
@@ -222,18 +242,21 @@ int getNoArgs(char *cmd)
     int index = 0;
     int noOfArgs = 0;
 
+    // if command starts with a letter
     if (cmd[index] != ' ')
     {
         noOfArgs++;
         while (cmd[index] != ' ' && cmd[index] != '\0')
         {
+            // find the next space of end of string
             index++;
         }
     }
-
+    // while we find a space
     while (cmd[index] == ' ')
     {
         index++;
+        // if space ends in empty string, exit
         if (cmd[index] == '\0')
         {
             return noOfArgs;
@@ -244,7 +267,8 @@ int getNoArgs(char *cmd)
             noOfArgs++;
             while (cmd[index] != ' ' && cmd[index] != '\0')
             {
-                // take it back to ' '
+                // take it to the next space or newline.
+                // though if it's a newline we return at the bottom
                 index++;
             }
         }
@@ -252,53 +276,22 @@ int getNoArgs(char *cmd)
     return noOfArgs;
 }
 
-void newAddToHistory(char *history[], int *historyIndex, char *str)
+void addToHistory(char *history[], int *historyIndex, char *str, int *historyStart)
 {
+
+    // copy string
     char *ptr = (char *)malloc(sizeof(char) * strlen(str));
     strcpy(ptr, str);
+
+    // slap it into our history
     history[*historyIndex] = ptr;
+
+    // increment or wrap to 0
     *historyIndex = (*historyIndex + 1) % 100;
-}
+    // check to see if we need to increase the history start index
+    if (*historyIndex == *historyStart)
+    {
 
-void addToHistory(char *history[], int *historyIndex, char *args[])
-{
-    // note, history is an array who's pointer starts at the end of the arr and moves backwards
-    int count = 0;
-    for (int i = 0; args[i] != NULL; i++)
-    {
-        count += strlen(args[i]) + 1;
-    }
-
-    char *str = (char *)malloc(sizeof(char) * (count));
-    history[*historyIndex] = str;
-
-    for (int i = 0; args[i] != NULL; i++)
-    {
-        strcat(str, args[i]);
-        strcat(str, " ");
-    }
-
-    *historyIndex = (*historyIndex + 1) % 100;
-}
-void printHistory(char *history[], int historyIndex)
-{
-    int count = 0;
-    historyIndex = (historyIndex - 1) % 100;
-    if (history[historyIndex] == NULL)
-    {
-        return;
-    }
-    while (history[historyIndex] != NULL && count < 100)
-    {
-        printf("%d %s\n", count, history[historyIndex]);
-        count++;
-        historyIndex = (historyIndex + 99) % 100;
-    }
-}
-void clearHistory(char *history[])
-{
-    for (int i = 0; i < 100; i++)
-    {
-        history[i] = NULL;
+        *historyStart = (*historyStart + 1) % 100;
     }
 }
